@@ -651,35 +651,115 @@ function renderPreview() {
 
     out += `<line x1="${TX1}" y1="${trackY}" x2="${TX2}" y2="${trackY}" stroke="${COLORS[tl.colorIdx]}" stroke-width="2" stroke-linecap="round"/>`;
 
+    // ── Compute raw x positions ──
+    const positions = nodes.map((nd, ni) => {
+      if (range > 0 && pd[ni]) return TX1 + ((pd[ni].getTime() - minT) / range) * TW;
+      return TX1 + (ni / Math.max(nodes.length - 1, 1)) * TW;
+    });
+
+    // ── Resolve label x positions to avoid overlap ──
+    // Estimate label width: ~7px per char, min 40px
+    const EST_W = 7;
+    const MIN_GAP = 6; // min px between label boxes
+
+    // Build label slots per side
+    const aboveSlots = []; // {idx, nx, lx} — lx = resolved label center x
+    const belowSlots = [];
     nodes.forEach((nd, ni) => {
-      let nx;
-      if (range > 0 && pd[ni]) nx = TX1 + ((pd[ni].getTime() - minT) / range) * TW;
-      else nx = TX1 + (ni / Math.max(nodes.length - 1, 1)) * TW;
+      const nx = positions[ni];
+      const above = ni % 2 === 0;
+      const displayLabel = nd.label || phLabel(ni, nodes.length);
+      const labelW = Math.max(40, displayLabel.length * EST_W);
+      (above ? aboveSlots : belowSlots).push({ ni, nx, lx: nx, labelW });
+    });
+
+    // Push overlapping labels apart (simple iterative spread)
+    function spreadSlots(slots) {
+      for (let iter = 0; iter < 20; iter++) {
+        let moved = false;
+        for (let i = 1; i < slots.length; i++) {
+          const a = slots[i - 1], b = slots[i];
+          const minDist = (a.labelW + b.labelW) / 2 + MIN_GAP;
+          const dist = b.lx - a.lx;
+          if (dist < minDist) {
+            const push = (minDist - dist) / 2;
+            a.lx -= push;
+            b.lx += push;
+            moved = true;
+          }
+        }
+        if (!moved) break;
+      }
+      // Clamp to track bounds
+      slots.forEach(s => { s.lx = Math.max(TX1 + s.labelW/2, Math.min(TX2 - s.labelW/2, s.lx)); });
+    }
+    spreadSlots(aboveSlots);
+    spreadSlots(belowSlots);
+
+    // Merge back into a lookup
+    const lxMap = {};
+    [...aboveSlots, ...belowSlots].forEach(s => { lxMap[s.ni] = s.lx; });
+
+    // ── Draw nodes ──
+    nodes.forEach((nd, ni) => {
+      const nx = positions[ni];
+      const lx = lxMap[ni] !== undefined ? lxMap[ni] : nx;
+      const shifted = Math.abs(lx - nx) > 2;
 
       const above = ni % 2 === 0;
       const r = (ni === 0 || ni === nodes.length - 1) ? 6 : 4;
       const TICK = 8;
+      const EXTRA = 18; // extra leader length when label is pushed
       const displayLabel = nd.label || phLabel(ni, nodes.length);
 
       out += `<circle cx="${nx}" cy="${trackY}" r="${r}" fill="${COLORS[nd.color]}" stroke="${bgColor}" stroke-width="2"/>`;
 
       if (above) {
-        out += `<line x1="${nx}" y1="${trackY - r}" x2="${nx}" y2="${trackY - r - TICK}" stroke="${COLORS[nd.color]}" stroke-width="1" opacity="0.45"/>`;
-        const dateY  = trackY - r - TICK - 5;
-        const labelY = dateY - 14;
-        out += `<text x="${nx}" y="${labelY}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
-        if (nd.date) {
-          const d = new Date(nd.date);
-          out += `<text x="${nx}" y="${dateY}" text-anchor="middle" font-family="DM Mono,monospace" font-size="10" fill="${subColor}">${d.getMonth() + 1}/${d.getDate()}</text>`;
+        const baseTop = trackY - r - TICK;
+        if (shifted) {
+          // vertical stub from node, then diagonal leader to label column
+          const leaderY = baseTop - EXTRA;
+          out += `<line x1="${nx}" y1="${trackY - r}" x2="${nx}" y2="${baseTop}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          out += `<line x1="${nx}" y1="${baseTop}" x2="${lx}" y2="${leaderY}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          const dateY  = leaderY - 5;
+          const labelY = dateY - 14;
+          out += `<text x="${lx}" y="${labelY}" text-anchor="middle" font-family="-apple-system,'Segoe UI',sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
+          if (nd.date) {
+            const d = new Date(nd.date);
+            out += `<text x="${lx}" y="${dateY}" text-anchor="middle" font-family="'SF Mono','Consolas',monospace" font-size="10" fill="${subColor}">${d.getMonth()+1}/${d.getDate()}</text>`;
+          }
+        } else {
+          out += `<line x1="${nx}" y1="${trackY - r}" x2="${nx}" y2="${baseTop}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          const dateY  = baseTop - 5;
+          const labelY = dateY - 14;
+          out += `<text x="${lx}" y="${labelY}" text-anchor="middle" font-family="-apple-system,'Segoe UI',sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
+          if (nd.date) {
+            const d = new Date(nd.date);
+            out += `<text x="${lx}" y="${dateY}" text-anchor="middle" font-family="'SF Mono','Consolas',monospace" font-size="10" fill="${subColor}">${d.getMonth()+1}/${d.getDate()}</text>`;
+          }
         }
       } else {
-        out += `<line x1="${nx}" y1="${trackY + r}" x2="${nx}" y2="${trackY + r + TICK}" stroke="${COLORS[nd.color]}" stroke-width="1" opacity="0.45"/>`;
-        const labelY = trackY + r + TICK + 13;
-        const dateY  = labelY + 13;
-        out += `<text x="${nx}" y="${labelY}" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
-        if (nd.date) {
-          const d = new Date(nd.date);
-          out += `<text x="${nx}" y="${dateY}" text-anchor="middle" font-family="DM Mono,monospace" font-size="10" fill="${subColor}">${d.getMonth() + 1}/${d.getDate()}</text>`;
+        const baseBot = trackY + r + TICK;
+        if (shifted) {
+          const leaderY = baseBot + EXTRA;
+          out += `<line x1="${nx}" y1="${trackY + r}" x2="${nx}" y2="${baseBot}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          out += `<line x1="${nx}" y1="${baseBot}" x2="${lx}" y2="${leaderY}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          const labelY = leaderY + 13;
+          const dateY  = labelY + 13;
+          out += `<text x="${lx}" y="${labelY}" text-anchor="middle" font-family="-apple-system,'Segoe UI',sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
+          if (nd.date) {
+            const d = new Date(nd.date);
+            out += `<text x="${lx}" y="${dateY}" text-anchor="middle" font-family="'SF Mono','Consolas',monospace" font-size="10" fill="${subColor}">${d.getMonth()+1}/${d.getDate()}</text>`;
+          }
+        } else {
+          out += `<line x1="${nx}" y1="${trackY + r}" x2="${nx}" y2="${baseBot}" stroke="${COLORS[nd.color]}" stroke-width="0.75" opacity="0.4"/>`;
+          const labelY = baseBot + 13;
+          const dateY  = labelY + 13;
+          out += `<text x="${lx}" y="${labelY}" text-anchor="middle" font-family="-apple-system,'Segoe UI',sans-serif" font-size="11" font-weight="500" fill="${textColor}">${esc(displayLabel)}</text>`;
+          if (nd.date) {
+            const d = new Date(nd.date);
+            out += `<text x="${lx}" y="${dateY}" text-anchor="middle" font-family="'SF Mono','Consolas',monospace" font-size="10" fill="${subColor}">${d.getMonth()+1}/${d.getDate()}</text>`;
+          }
         }
       }
     });

@@ -280,6 +280,59 @@
     display: block;
   }
 
+  /* ── Duplicate dropdown ── */
+  .dup-wrap { position: relative; display: inline-block; }
+  .dup-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 180px;
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 50;
+    overflow: hidden;
+  }
+  .dup-menu.open { display: block; }
+  .dup-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    color: var(--text);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+  }
+  .dup-menu-item:hover { background: var(--bg3); }
+  .dup-menu-item .dup-swatch {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dup-menu-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Edit hint ── */
+  .edit-hint {
+    font-size: 0.68rem;
+    color: var(--text3);
+    font-family: 'SF Mono','Consolas',monospace;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .tl-card-header:hover .edit-hint { opacity: 1; }
+
+  /* ── Footer ── */
   /* ── Footer ── */
   .footer {
     margin-top: 3rem;
@@ -398,12 +451,20 @@
   <!-- Timeline cards -->
   <div class="tl-list" id="tlList"></div>
 
-  <!-- Add button -->
-  <div class="add-row">
+  <!-- Add / Duplicate buttons -->
+  <div class="add-row" id="addRow" style="gap:8px;flex-wrap:wrap;">
     <button class="btn" onclick="addTimeline()">
       <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      新增 Timeline
+      新增
     </button>
+    <div class="dup-wrap" id="dupWrap">
+      <button class="btn" id="dupBtn" onclick="toggleDupMenu(event)" style="display:none">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        複製
+        <svg viewBox="0 0 24 24" style="width:12px;height:12px;margin-left:2px"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="dup-menu" id="dupMenu"></div>
+    </div>
   </div>
 
   <!-- Preview -->
@@ -486,12 +547,49 @@ function addTimeline(n = 4) {
   for (let i = 0; i < n; i++) nodes.push({ label: '', date: '', color: ci });
   timelines.push({ id, name: 'Timeline ' + id, nodes, colorIdx: ci });
   renderAll();
+  updateDupMenu();
 }
 
 function removeTl(id) {
   timelines = timelines.filter(t => t.id !== id);
   renderAll();
+  updateDupMenu();
 }
+
+function updateDupMenu() {
+  const btn = document.getElementById('dupBtn');
+  const menu = document.getElementById('dupMenu');
+  if (!btn || !menu) return;
+  btn.style.display = timelines.length >= 1 ? '' : 'none';
+  menu.innerHTML = timelines.map(tl => `
+    <div class="dup-menu-item" onclick="duplicateTimeline(${tl.id});closeDupMenu()">
+      <div class="dup-swatch" style="background:${COLORS[tl.colorIdx]}"></div>
+      <span class="dup-menu-label">${esc(tl.name)}</span>
+    </div>`).join('');
+}
+
+function duplicateTimeline(id) {
+  const src = timelines.find(t => t.id === id);
+  if (!src) return;
+  const newId = ++tlCount;
+  const ci = (src.colorIdx + 1) % COLORS.length;
+  const nodes = src.nodes.map(n => ({ label: n.label, date: n.date, color: ci }));
+  timelines.push({ id: newId, name: src.name + ' 複製', nodes, colorIdx: ci });
+  renderAll();
+  updateDupMenu();
+}
+
+function toggleDupMenu(e) {
+  e.stopPropagation();
+  updateDupMenu();
+  document.getElementById('dupMenu').classList.toggle('open');
+}
+
+function closeDupMenu() {
+  document.getElementById('dupMenu').classList.remove('open');
+}
+
+document.addEventListener('click', () => closeDupMenu());
 
 function changeNodeCount(id, v) {
   v = Math.max(2, Math.min(10, parseInt(v) || 2));
@@ -557,7 +655,8 @@ function renderEditor() {
     <div class="tl-card-header">
       <div class="tl-swatch" style="background:${COLORS[tl.colorIdx]}"></div>
       <input class="tl-name-input" value="${esc(tl.name)}" placeholder="Timeline 名稱"
-        oninput="timelines.find(t=>t.id==${tl.id}).name=this.value;renderPreview()">
+        oninput="timelines.find(t=>t.id==${tl.id}).name=this.value;renderPreview();updateDupMenu()">
+      <span class="edit-hint">← 點擊可編輯</span>
       <div class="tl-controls">
         <div class="count-field">
           節點
@@ -914,8 +1013,8 @@ function loadFromHash() {
 // Init
 if (!loadFromHash()) {
   addTimeline(4);
-  addTimeline(5);
 }
+updateDupMenu();
 window.addEventListener('resize', renderPreview);
 </script>
 </body>

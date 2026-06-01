@@ -657,48 +657,46 @@ function renderPreview() {
       return TX1 + (ni / Math.max(nodes.length - 1, 1)) * TW;
     });
 
-    // ── Resolve label x positions to avoid overlap ──
-    // Estimate label width: ~7px per char, min 40px
-    const EST_W = 7;
-    const MIN_GAP = 6; // min px between label boxes
+    // ── Resolve label x positions ──
+    // Head (ni=0) and tail (ni=last) are fixed — no collision handling needed.
+    // Only middle nodes on the same side (above/below) may overlap each other.
+    const EST_W = 7;   // estimated px per character
+    const MIN_GAP = 8; // minimum px between adjacent label boxes on same side
 
-    // Build label slots per side
-    const aboveSlots = []; // {idx, nx, lx} — lx = resolved label center x
-    const belowSlots = [];
+    const lxMap = {};
+    const last = nodes.length - 1;
+
+    // Head and tail always fixed at their node x
+    lxMap[0] = positions[0];
+    if (last > 0) lxMap[last] = positions[last];
+
+    // Collect middle nodes grouped by side
+    const aboveMid = [], belowMid = [];
     nodes.forEach((nd, ni) => {
-      const nx = positions[ni];
+      if (ni === 0 || ni === last) return;
       const above = ni % 2 === 0;
-      const displayLabel = nd.label || phLabel(ni, nodes.length);
-      const labelW = Math.max(40, displayLabel.length * EST_W);
-      (above ? aboveSlots : belowSlots).push({ ni, nx, lx: nx, labelW });
+      const label = nd.label || phLabel(ni, nodes.length);
+      const w = Math.max(36, label.length * EST_W);
+      (above ? aboveMid : belowMid).push({ ni, nx: positions[ni], lx: positions[ni], w });
     });
 
-    // Push overlapping labels apart (simple iterative spread)
-    function spreadSlots(slots) {
-      for (let iter = 0; iter < 20; iter++) {
-        let moved = false;
-        for (let i = 1; i < slots.length; i++) {
-          const a = slots[i - 1], b = slots[i];
-          const minDist = (a.labelW + b.labelW) / 2 + MIN_GAP;
-          const dist = b.lx - a.lx;
-          if (dist < minDist) {
-            const push = (minDist - dist) / 2;
-            a.lx -= push;
-            b.lx += push;
-            moved = true;
-          }
+    // For middle nodes: only push apart neighbours that are too close
+    function resolveMiddle(slots) {
+      // sort by original x (should already be sorted, but just in case)
+      slots.sort((a, b) => a.nx - b.nx);
+      for (let i = 1; i < slots.length; i++) {
+        const a = slots[i - 1], b = slots[i];
+        const need = (a.w + b.w) / 2 + MIN_GAP;
+        const gap = b.lx - a.lx;
+        if (gap < need) {
+          // push b to the right only — don't move a (it may already be settled)
+          b.lx = a.lx + need;
         }
-        if (!moved) break;
       }
-      // Clamp to track bounds
-      slots.forEach(s => { s.lx = Math.max(TX1 + s.labelW/2, Math.min(TX2 - s.labelW/2, s.lx)); });
+      slots.forEach(s => { lxMap[s.ni] = s.lx; });
     }
-    spreadSlots(aboveSlots);
-    spreadSlots(belowSlots);
-
-    // Merge back into a lookup
-    const lxMap = {};
-    [...aboveSlots, ...belowSlots].forEach(s => { lxMap[s.ni] = s.lx; });
+    resolveMiddle(aboveMid);
+    resolveMiddle(belowMid);
 
     // ── Draw nodes ──
     nodes.forEach((nd, ni) => {

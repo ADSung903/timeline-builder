@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Timeline Builder — by AD</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -39,7 +36,7 @@
 
   html { font-size: 16px; }
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
@@ -73,7 +70,7 @@
     font-size: 0.75rem;
     color: var(--text3);
     margin-top: 3px;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
   }
   .header-actions {
     display: flex;
@@ -86,7 +83,7 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.8rem;
     font-weight: 500;
     padding: 6px 14px;
@@ -128,7 +125,7 @@
     flex-shrink: 0;
   }
   .tl-name-input {
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.875rem;
     font-weight: 500;
     border: none;
@@ -158,7 +155,7 @@
   .count-field input {
     width: 40px;
     text-align: center;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
     font-size: 0.75rem;
     padding: 3px 5px;
     border: 1px solid var(--border);
@@ -204,7 +201,7 @@
     padding: 6px 14px 4px;
     font-size: 0.7rem;
     color: var(--text3);
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
     letter-spacing: 0.04em;
   }
   .node-rows { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 5px; }
@@ -232,7 +229,7 @@
   .drag-handle svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; }
 
   .node-inp {
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.8rem;
     padding: 4px 8px;
     border: 1px solid var(--border);
@@ -265,7 +262,7 @@
   }
   .preview-label {
     font-size: 0.7rem;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text3);
@@ -292,7 +289,7 @@
     align-items: center;
     justify-content: space-between;
     font-size: 0.7rem;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
     color: var(--text3);
   }
 
@@ -304,7 +301,7 @@
     transform: translateX(-50%) translateY(12px);
     background: var(--text);
     color: var(--bg);
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
     font-size: 0.8rem;
     padding: 8px 18px;
     border-radius: 20px;
@@ -345,7 +342,7 @@
     font-size: 0.75rem;
     color: var(--text3);
     margin-bottom: 1rem;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
   }
   .share-url-row {
     display: flex;
@@ -354,7 +351,7 @@
   }
   .share-url-input {
     flex: 1;
-    font-family: 'DM Mono', monospace;
+    font-family: 'SF Mono', 'Consolas', monospace;
     font-size: 0.72rem;
     padding: 7px 10px;
     border: 1px solid var(--border);
@@ -376,7 +373,7 @@
     border-radius: 6px;
     border: none;
     background: transparent;
-    font-family: 'DM Sans', sans-serif;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
   }
   .modal-close:hover { background: var(--bg3); color: var(--text); }
 </style>
@@ -707,9 +704,139 @@ function exportSVG() {
   URL.revokeObjectURL(url);
 }
 
+function exportPNG() {
+  const svg = document.getElementById('preview-svg');
+  const vb = (svg.getAttribute('viewBox') || '').split(' ');
+  const W = parseFloat(vb[2]) || svg.parentElement.clientWidth || 780;
+  const H = parseFloat(svg.getAttribute('height')) || 300;
+  const SCALE = 2;
+
+  // Serialize SVG — use only system fonts so Canvas is never tainted
+  const serializer = new XMLSerializer();
+  let src = serializer.serializeToString(svg);
+  if (!src.includes('xmlns=')) src = src.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+
+  // Encode as data URI (avoids Blob URL CORS issue in some browsers)
+  const encoded = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+
+  const img = new Image();
+  img.onload = function () {
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.ceil(W * SCALE);
+    canvas.height = Math.ceil(H * SCALE);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(SCALE, SCALE);
+    ctx.drawImage(img, 0, 0, W, H);
+    try {
+      const a = document.createElement('a');
+      a.download = 'timeline-by-AD.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+      showToast('PNG 已匯出 ✓');
+    } catch (e) {
+      showToast('PNG 匯出失敗，請用 SVG');
+    }
+  };
+  img.onerror = () => showToast('圖片載入失敗，請用 SVG');
+  img.src = encoded;
+}
+
+// ── Share link ──
+function encodeState() {
+  const data = {
+    dark: isDark,
+    tls: timelines.map(tl => ({
+      id: tl.id,
+      name: tl.name,
+      colorIdx: tl.colorIdx,
+      nodes: tl.nodes.map(n => ({ label: n.label, date: n.date, color: n.color }))
+    })),
+    count: tlCount
+  };
+  return btoa(encodeURIComponent(JSON.stringify(data)));
+}
+
+function decodeState(hash) {
+  try {
+    return JSON.parse(decodeURIComponent(atob(hash)));
+  } catch (e) { return null; }
+}
+
+function openShareModal() {
+  const encoded = encodeState();
+  const base = location.href.split('#')[0];
+  // If running locally as file://, show a notice; on Vercel it will be full HTTPS URL
+  const url = base.startsWith('file:')
+    ? '[ 部署到 Vercel 後才能使用分享連結 ]  hash: ' + encoded
+    : base + '#' + encoded;
+  document.getElementById('shareUrlInput').value = url;
+  document.getElementById('shareModal').classList.add('open');
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.remove('open');
+}
+
+function copyShareUrl() {
+  const input = document.getElementById('shareUrlInput');
+  const text = input.value;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      closeShareModal();
+      showToast('連結已複製到剪貼簿 ✓');
+    }).catch(() => fallbackCopy(input, text));
+  } else {
+    fallbackCopy(input, text);
+  }
+}
+function fallbackCopy(input, text) {
+  input.removeAttribute('readonly');
+  input.select();
+  input.setSelectionRange(0, 99999);
+  const ok = document.execCommand('copy');
+  input.setAttribute('readonly', '');
+  closeShareModal();
+  showToast(ok ? '連結已複製 ✓' : '請手動複製上方連結');
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ── Load from hash on startup ──
+function loadFromHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return false;
+  const data = decodeState(hash);
+  if (!data || !data.tls) return false;
+  timelines = data.tls.map(tl => ({
+    id: tl.id,
+    name: tl.name,
+    colorIdx: tl.colorIdx,
+    nodes: tl.nodes.map(n => ({ label: n.label || '', date: n.date || '', color: n.color }))
+  }));
+  tlCount = data.count || timelines.length;
+  if (data.dark) {
+    isDark = true;
+    document.body.classList.add('dark');
+    document.getElementById('themeIcon').innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  }
+  renderAll();
+  showToast('已從分享連結載入資料');
+  return true;
+}
+
 // Init
-addTimeline(4);
-addTimeline(5);
+if (!loadFromHash()) {
+  addTimeline(4);
+  addTimeline(5);
+}
 window.addEventListener('resize', renderPreview);
 </script>
 </body>

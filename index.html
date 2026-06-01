@@ -513,7 +513,8 @@ function setTlColor(id, ci) {
 function setNode(id, ni, key, val) {
   const tl = timelines.find(t => t.id === id);
   if (tl && tl.nodes[ni]) tl.nodes[ni][key] = key === 'color' ? parseInt(val) : val;
-  renderPreview();
+  if (key === 'color') renderAll();
+  else renderPreview();
 }
 
 function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
